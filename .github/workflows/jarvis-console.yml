@@ -30,6 +30,12 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Acknowledge wake-up
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body "⚡ Jarvis się budzi — uruchamiam runtime i model."
+
       - name: Checkout Jarvis
         uses: actions/checkout@v4
         with:
