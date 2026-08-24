@@ -1,0 +1,36 @@
+[engine]
+default = "ollama"
+
+[engine.ollama]
+host = "http://127.0.0.1:11434"
+
+[intelligence]
+default_model = "qwen3.5:2b"
+fallback_model = "qwen3.5:2b"
+temperature = 0.3
+max_tokens = 1200
+
+[agent]
+default_agent = "orchestrator"
+max_turns = 12
+context_from_memory = true
+
+[tools]
+enabled = [
+  "think",
+  "calculator",
+  "web_search",
+  "file_read",
+  "memory_store",
+  "memory_search",
+  "memory_retrieve",
+]
+
+[tools.storage]
+default_backend = "sqlite"
+
+[memory_files]
+persona_name = "jarvis"
+
+[telemetry]
+enabled = false
