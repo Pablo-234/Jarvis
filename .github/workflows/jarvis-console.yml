@@ -1,0 +1,128 @@
+name: Jarvis Console
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Prompt for Jarvis
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: jarvis-console
+  cancel-in-progress: false
+
+jobs:
+  jarvis:
+    if: >-
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 1 &&
+       github.event.comment.user.login == 'Pablo-234' &&
+       startsWith(github.event.comment.body, '/jarvis ')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Jarvis
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python and uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+          enable-cache: true
+
+      - name: Cache Ollama model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: jarvis-ollama-qwen3.5-2b-v1
+
+      - name: Install and start Ollama
+        shell: bash
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            if ollama list >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          ollama pull qwen3.5:2b
+
+      - name: Install OpenJarvis
+        working-directory: OpenJarvis
+        run: uv sync
+
+      - name: Run Jarvis
+        id: run_jarvis
+        shell: bash
+        working-directory: OpenJarvis
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_PROMPT: ${{ inputs.prompt }}
+          OLLAMA_HOST: http://127.0.0.1:11434
+          OPENJARVIS_HOME: ${{ github.workspace }}/.jarvis-runtime
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PROMPT="$DISPATCH_PROMPT"
+          else
+            PROMPT="${COMMENT_BODY#/jarvis }"
+          fi
+
+          if [ -z "$PROMPT" ]; then
+            echo 'Prompt is empty.' > /tmp/jarvis-result.txt
+            exit 0
+          fi
+
+          set +e
+          uv run jarvis --quiet ask "$PROMPT" \
+            --engine ollama \
+            --model qwen3.5:2b \
+            --agent orchestrator \
+            --tools think,calculator,web_search \
+            --max-tokens 900 \
+            --json > /tmp/jarvis-result.txt 2>/tmp/jarvis-stderr.txt
+          STATUS=$?
+          set -e
+
+          if [ $STATUS -ne 0 ]; then
+            {
+              echo 'Jarvis failed to answer.'
+              echo
+              tail -c 12000 /tmp/jarvis-stderr.txt
+            } > /tmp/jarvis-result.txt
+          fi
+
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/jarvis-result.txt')
+          text = p.read_text(errors='replace') if p.exists() else 'No output.'
+          if len(text) > 55000:
+              text = text[:55000] + '\n\n[output truncated]'
+          p.write_text(text)
+          PY
+
+      - name: Reply in Jarvis Console
+        if: github.event_name == 'issue_comment' && always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo '### 🤖 Jarvis'
+            echo
+            cat /tmp/jarvis-result.txt 2>/dev/null || echo 'Runtime ended without output.'
+            echo
+            echo '---'
+            echo '_OpenJarvis · qwen3.5:2b · GitHub Actions_'
+          } > /tmp/comment.md
+          gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
