@@ -1,9 +1,6 @@
 [engine]
 default = "ollama"
 
-[engine.ollama]
-host = "http://127.0.0.1:11434"
-
 [intelligence]
 default_model = "qwen3.5:2b"
 fallback_model = "qwen3.5:2b"
