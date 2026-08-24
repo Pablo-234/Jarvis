@@ -110,8 +110,16 @@ jobs:
 
           python - <<'PY'
           from pathlib import Path
+          import json
+
           p = Path('/tmp/jarvis-result.txt')
           text = p.read_text(errors='replace') if p.exists() else 'No output.'
+          try:
+              data = json.loads(text)
+              if isinstance(data, dict) and isinstance(data.get('content'), str):
+                  text = data['content']
+          except Exception:
+              pass
           if len(text) > 55000:
               text = text[:55000] + '\n\n[output truncated]'
           p.write_text(text)
