@@ -9,10 +9,19 @@ on:
         description: Prompt for Jarvis
         required: true
         type: string
+      mode:
+        description: Run mode
+        required: true
+        default: normal
+        type: choice
+        options:
+          - normal
+          - dev
 
 permissions:
-  contents: read
+  contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: jarvis-console
@@ -24,7 +33,8 @@ jobs:
       (github.event_name == 'issue_comment' &&
        github.event.issue.number == 1 &&
        github.event.comment.user.login == 'Pablo-234' &&
-       startsWith(github.event.comment.body, '/jarvis ')) ||
+       (startsWith(github.event.comment.body, '/jarvis ') ||
+        startsWith(github.event.comment.body, '/jarvis-dev '))) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -34,12 +44,38 @@ jobs:
         if: github.event_name == 'issue_comment'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body "⚡ Jarvis się budzi — uruchamiam runtime i model."
+        run: |
+          if [[ "${{ github.event.comment.body }}" == /jarvis-dev\ * ]]; then
+            gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body "🛠️ Jarvis DEV się budzi — odtwarzam pamięć i przygotowuję bezpieczny workspace."
+          else
+            gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body "⚡ Jarvis się budzi — odtwarzam pamięć i uruchamiam model."
+          fi
 
-      - name: Checkout Jarvis
+      - name: Checkout Jarvis without persistent credentials
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Restore Jarvis private runtime memory
+        uses: actions/cache/restore@v4
+        with:
+          path: .jarvis-runtime
+          key: jarvis-memory-${{ github.run_id }}
+          restore-keys: |
+            jarvis-memory-
+
+      - name: Prepare persona and runtime configuration
+        shell: bash
+        env:
+          OPENJARVIS_HOME: ${{ github.workspace }}/.jarvis-runtime
+        run: |
+          mkdir -p "$OPENJARVIS_HOME/personas/jarvis"
+          cp jarvis/config.toml "$OPENJARVIS_HOME/config.toml"
+          cp jarvis/SOUL.md "$OPENJARVIS_HOME/personas/jarvis/SOUL.md"
+          cp jarvis/USER.md "$OPENJARVIS_HOME/personas/jarvis/USER.md"
+          cp jarvis/MEMORY.md "$OPENJARVIS_HOME/personas/jarvis/MEMORY.md"
 
       - name: Set up Python and uv
         uses: astral-sh/setup-uv@v6
@@ -68,25 +104,57 @@ jobs:
         working-directory: OpenJarvis
         run: uv sync
 
-      - name: Run Jarvis
-        id: run_jarvis
+      - name: Resolve command mode and prompt
+        id: command
         shell: bash
-        working-directory: OpenJarvis
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
           DISPATCH_PROMPT: ${{ inputs.prompt }}
-          OLLAMA_HOST: http://127.0.0.1:11434
-          OPENJARVIS_HOME: ${{ github.workspace }}/.jarvis-runtime
+          DISPATCH_MODE: ${{ inputs.mode }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${DISPATCH_MODE:-normal}"
             PROMPT="$DISPATCH_PROMPT"
+          elif [[ "$COMMENT_BODY" == /jarvis-dev\ * ]]; then
+            MODE="dev"
+            PROMPT="${COMMENT_BODY#/jarvis-dev }"
           else
+            MODE="normal"
             PROMPT="${COMMENT_BODY#/jarvis }"
           fi
 
           if [ -z "$PROMPT" ]; then
             echo 'Prompt is empty.' > /tmp/jarvis-result.txt
+          fi
+
+          printf '%s' "$PROMPT" > /tmp/jarvis-prompt.txt
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Run Jarvis
+        id: run_jarvis
+        shell: bash
+        working-directory: OpenJarvis
+        env:
+          OLLAMA_HOST: http://127.0.0.1:11434
+          OPENJARVIS_HOME: ${{ github.workspace }}/.jarvis-runtime
+          JARVIS_MODE: ${{ steps.command.outputs.mode }}
+          JARVIS_WORKSPACE: ${{ github.workspace }}
+        run: |
+          PROMPT="$(cat /tmp/jarvis-prompt.txt)"
+          if [ -z "$PROMPT" ]; then
             exit 0
+          fi
+
+          if [ "$JARVIS_MODE" = "dev" ]; then
+            TOOLS="think,calculator,web_search,http_request,file_read,file_write,apply_patch,shell_exec,git_status,git_diff,code_interpreter,memory_store,memory_search,memory_retrieve"
+            PROMPT="JARVIS DEV MODE. The Jarvis repository root is: $JARVIS_WORKSPACE
+
+You may inspect and modify files inside that repository and run relevant tests. Do not commit or push; the platform will create a reviewable pull request after you finish. Do not modify .github/workflows, .gitmodules, .git, or the OpenJarvis submodule. Keep the diff focused.
+
+User request:
+$PROMPT"
+          else
+            TOOLS="think,calculator,web_search,http_request,file_read,memory_store,memory_search,memory_retrieve"
           fi
 
           set +e
@@ -94,8 +162,9 @@ jobs:
             --engine ollama \
             --model qwen3.5:2b \
             --agent orchestrator \
-            --tools think,calculator,web_search \
-            --max-tokens 900 \
+            --persona jarvis \
+            --tools "$TOOLS" \
+            --max-tokens 1200 \
             --json > /tmp/jarvis-result.txt 2>/tmp/jarvis-stderr.txt
           STATUS=$?
           set -e
@@ -120,23 +189,88 @@ jobs:
                   text = data['content']
           except Exception:
               pass
-          if len(text) > 55000:
-              text = text[:55000] + '\n\n[output truncated]'
+          if len(text) > 50000:
+              text = text[:50000] + '\n\n[output truncated]'
           p.write_text(text)
           PY
+
+      - name: Enforce development boundaries
+        if: steps.command.outputs.mode == 'dev'
+        shell: bash
+        run: |
+          # The model never receives a GitHub token. Restore automation and
+          # upstream source even if the model attempted to touch them.
+          git restore --source=HEAD --staged --worktree .github/workflows .gitmodules || true
+          git clean -fd .github/workflows || true
+          git -C OpenJarvis reset --hard HEAD || true
+          git -C OpenJarvis clean -fdx || true
+
+      - name: Create reviewable PR from Jarvis DEV changes
+        id: dev_pr
+        if: steps.command.outputs.mode == 'dev'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "jarvis-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A -- . \
+            ':(exclude).jarvis-runtime' \
+            ':(exclude).jarvis-runtime/**' \
+            ':(exclude).env' \
+            ':(exclude).github/workflows/**' \
+            ':(exclude).gitmodules' \
+            ':(exclude)OpenJarvis' \
+            ':(exclude)OpenJarvis/**'
+
+          if git diff --cached --quiet; then
+            echo "No repository changes were produced." > /tmp/jarvis-pr.txt
+            exit 0
+          fi
+
+          BRANCH="jarvis/auto-${GITHUB_RUN_ID}"
+          git switch -c "$BRANCH"
+          git commit -m "Jarvis DEV: automated proposal"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --set-upstream origin "$BRANCH"
+
+          PR_URL="$(gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$BRANCH" \
+            --title "🤖 Jarvis DEV proposal #${GITHUB_RUN_ID}" \
+            --body "Automated proposal produced by owner-invoked Jarvis DEV mode from console issue #1.\n\nThe model did not receive the GitHub token. Protected workflow files, .gitmodules, the runtime-memory directory, .env, and the OpenJarvis submodule are excluded from persistence. Review before merging.")"
+          echo "Proposed code changes: $PR_URL" > /tmp/jarvis-pr.txt
+
+      - name: Save Jarvis private runtime memory
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .jarvis-runtime
+          key: jarvis-memory-${{ github.run_id }}
 
       - name: Reply in Jarvis Console
         if: github.event_name == 'issue_comment' && always()
         env:
           GH_TOKEN: ${{ github.token }}
+          JARVIS_MODE: ${{ steps.command.outputs.mode }}
         shell: bash
         run: |
           {
-            echo '### 🤖 Jarvis'
+            if [ "$JARVIS_MODE" = "dev" ]; then
+              echo '### 🛠️ Jarvis DEV'
+            else
+              echo '### 🤖 Jarvis'
+            fi
             echo
             cat /tmp/jarvis-result.txt 2>/dev/null || echo 'Runtime ended without output.'
+            if [ -f /tmp/jarvis-pr.txt ]; then
+              echo
+              cat /tmp/jarvis-pr.txt
+            fi
             echo
             echo '---'
-            echo '_OpenJarvis · qwen3.5:2b · GitHub Actions_'
+            echo '_OpenJarvis · qwen3.5:2b · persistent memory · GitHub Actions_'
           } > /tmp/comment.md
           gh issue comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
