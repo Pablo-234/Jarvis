@@ -1,0 +1,36 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${JARVIS_MODEL:-qwen3.5:2b}"]
+    restart: "no"
+
+  jarvis:
+    build: .
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY in .env}
+      OLLAMA_HOST: http://ollama:11434
+      JARVIS_MODEL: ${JARVIS_MODEL:-qwen3.5:2b}
+      PORT: 8000
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - jarvis-data:/data/openjarvis
+
+volumes:
+  ollama-data:
+  jarvis-data:
