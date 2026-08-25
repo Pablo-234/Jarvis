@@ -16,7 +16,10 @@ if (-not (Test-Path '.env')) {
 }
 
 $envText = Get-Content '.env' -Raw
-if ($envText -match 'OPENJARVIS_API_KEY=change-me' -or $envText -notmatch 'OPENJARVIS_API_KEY=') {
+$hasPlaceholder = $envText -match '(?m)^OPENJARVIS_API_KEY=change-me.*$'
+$hasApiKey = $envText -match '(?m)^OPENJARVIS_API_KEY=.+$'
+
+if ($hasPlaceholder -or -not $hasApiKey) {
     $bytes = New-Object byte[] 48
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     try {
@@ -26,8 +29,8 @@ if ($envText -match 'OPENJARVIS_API_KEY=change-me' -or $envText -notmatch 'OPENJ
     }
     $secret = [Convert]::ToBase64String($bytes).Replace('+','-').Replace('/','_').TrimEnd('=')
 
-    if ($envText -match 'OPENJARVIS_API_KEY=change-me') {
-        $envText = $envText -replace 'OPENJARVIS_API_KEY=change-me', "OPENJARVIS_API_KEY=$secret"
+    if ($envText -match '(?m)^OPENJARVIS_API_KEY=.*$') {
+        $envText = [regex]::Replace($envText, '(?m)^OPENJARVIS_API_KEY=.*$', "OPENJARVIS_API_KEY=$secret")
     } else {
         $envText = $envText.TrimEnd() + "`r`nOPENJARVIS_API_KEY=$secret`r`n"
     }
@@ -35,10 +38,11 @@ if ($envText -match 'OPENJARVIS_API_KEY=change-me' -or $envText -notmatch 'OPENJ
     Write-Host 'Generated a private OpenJarvis API key in .env.' -ForegroundColor Green
 }
 
-Write-Host 'Starting Jarvis + Ollama...' -ForegroundColor Cyan
+Write-Host 'Starting Jarvis + Ollama + Dashboard...' -ForegroundColor Cyan
 docker compose up --build -d
 
 Write-Host ''
 Write-Host 'Jarvis is starting in the background.' -ForegroundColor Green
-Write-Host 'API: http://127.0.0.1:8000' -ForegroundColor Cyan
+Write-Host 'API:       http://127.0.0.1:8000' -ForegroundColor Cyan
+Write-Host 'Dashboard: http://127.0.0.1:8765' -ForegroundColor Cyan
 Write-Host 'Use .\status-jarvis.ps1 to inspect it and .\stop-jarvis.ps1 to stop it.' -ForegroundColor DarkGray
