@@ -27,9 +27,25 @@ services:
       JARVIS_MODEL: ${JARVIS_MODEL:-qwen3.5:2b}
       PORT: 8000
     ports:
-      - "${PORT:-8000}:8000"
+      - "127.0.0.1:${PORT:-8000}:8000"
     volumes:
       - jarvis-data:/data/openjarvis
+      - ./jarvis/config.toml:/bootstrap/config.toml:ro
+      - ./jarvis/SOUL.md:/bootstrap/SOUL.md:ro
+      - ./jarvis/USER.md:/bootstrap/USER.md:ro
+      - ./jarvis/MEMORY.md:/bootstrap/MEMORY.md:ro
+
+  dashboard:
+    image: nginx:alpine
+    depends_on:
+      - jarvis
+      - ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8765}:80"
+    volumes:
+      - ./dashboard/index.html:/usr/share/nginx/html/index.html:ro
+      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   ollama-data:
