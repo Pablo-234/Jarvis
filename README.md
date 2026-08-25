@@ -1,8 +1,51 @@
 # Jarvis
 
-Jarvis uses [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) as its foundation and adds a persistent persona, private runtime memory, a protected local runtime and an owner-only GitHub control plane.
+Jarvis uses [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) as its foundation and adds a persistent persona, private runtime memory, a protected local runtime, a local dashboard and an owner-only GitHub control plane.
 
 The upstream project is pinned in the `OpenJarvis/` submodule, while this repository contains the runtime and safety layer around it.
+
+## One-click run on Windows
+
+The simplest way to start everything is to double-click:
+
+```text
+run.cmd
+```
+
+`run.cmd` launches `run.ps1`, which:
+
+1. checks Docker Desktop,
+2. creates `.env` if necessary,
+3. generates a strong private OpenJarvis API key on first run,
+4. starts Ollama, OpenJarvis and the dashboard with Docker Compose,
+5. waits for the dashboard,
+6. opens it automatically in the browser.
+
+Dashboard: `http://127.0.0.1:8765`
+
+OpenJarvis API docs: `http://127.0.0.1:8000/docs`
+
+Useful local files:
+
+```text
+run.cmd               # double-click: start everything
+run.ps1               # PowerShell one-click launcher
+start-jarvis.ps1      # start stack without opening dashboard
+status-jarvis.ps1     # container status
+stop-jarvis.ps1       # stop Jarvis
+```
+
+## Local dashboard
+
+The dashboard is a tiny nginx container with no Node.js/Python requirement on the host. It shows:
+
+- Jarvis API online/offline state,
+- Ollama online/offline state,
+- detected local model,
+- all models currently available in Ollama,
+- shortcuts to OpenJarvis API docs, GitHub Jarvis Console and the repository.
+
+It binds only to `127.0.0.1` by default and does not store the OpenJarvis API key.
 
 ## What is included
 
@@ -11,6 +54,8 @@ The upstream project is pinned in the `OpenJarvis/` submodule, while this reposi
 - persistent Jarvis persona (`SOUL.md`, `USER.md`, `MEMORY.md` seed)
 - private SQLite memory persisted between GitHub Actions runs
 - Docker/Compose local runtime with a durable data volume
+- local Jarvis dashboard on port 8765
+- one-click Windows launcher
 - protected OpenJarvis API launcher
 - owner-only GitHub Actions console
 - safe development mode that can prepare code changes as reviewable pull requests
@@ -58,19 +103,19 @@ Do not store passwords, API keys, access tokens or other secrets in Jarvis memor
 
 ## Local Docker runtime
 
-Create `.env` from `.env.example`, replace `OPENJARVIS_API_KEY` with a long random secret, then run:
-
-```bash
-docker compose up --build
-```
-
-Or on Windows run:
+Manual start is still available:
 
 ```powershell
 .\start-jarvis.ps1
 ```
 
-The stack starts Ollama, downloads the configured local model and starts the OpenJarvis API on port 8000. The same Jarvis persona/config is copied into the durable `jarvis-data` volume, so local memory survives container restarts.
+or:
+
+```bash
+docker compose up --build -d
+```
+
+The stack starts Ollama, downloads the configured local model, starts OpenJarvis on port 8000 and the dashboard on port 8765. The Jarvis persona/config is copied into the durable `jarvis-data` volume, so local memory survives container restarts.
 
 ## Clone for development
 
@@ -92,6 +137,7 @@ git submodule update --init --recursive
 - DEV changes cannot persist `.github/workflows`, `.gitmodules`, `.env`, `.jarvis-runtime` or edits inside the upstream submodule.
 - Repository edits are proposed through a PR rather than merged automatically.
 - Local API access requires `OPENJARVIS_API_KEY`.
+- Local API and dashboard are bound to loopback (`127.0.0.1`) by default.
 
 ## Upstream and license
 
