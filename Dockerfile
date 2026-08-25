@@ -22,4 +22,4 @@ WORKDIR /opt/openjarvis
 VOLUME ["/data/openjarvis"]
 EXPOSE 8000
 
-CMD ["sh", "-c", "mkdir -p ${OPENJARVIS_HOME}/personas/jarvis && cp /opt/jarvis-profile/config.toml ${OPENJARVIS_HOME}/config.toml && cp /opt/jarvis-profile/SOUL.md ${OPENJARVIS_HOME}/personas/jarvis/SOUL.md && cp /opt/jarvis-profile/USER.md ${OPENJARVIS_HOME}/personas/jarvis/USER.md && cp /opt/jarvis-profile/MEMORY.md ${OPENJARVIS_HOME}/personas/jarvis/MEMORY.md && exec uv run jarvis serve --host 0.0.0.0 --port ${PORT:-8000} --engine ollama --model ${JARVIS_MODEL:-qwen3.5:2b} --agent orchestrator"]
+CMD ["sh", "-c", "mkdir -p ${OPENJARVIS_HOME}/personas/jarvis && cp /opt/jarvis-profile/config.toml ${OPENJARVIS_HOME}/config.toml && cp /opt/jarvis-profile/SOUL.md ${OPENJARVIS_HOME}/personas/jarvis/SOUL.md && cp /opt/jarvis-profile/USER.md ${OPENJARVIS_HOME}/personas/jarvis/USER.md && cp /opt/jarvis-profile/MEMORY.md ${OPENJARVIS_HOME}/personas/jarvis/MEMORY.md && exec uv run jarvis serve --host 0.0.0.0 --port ${PORT:-8000} --engine ollama --model ${JARVIS_MODEL:-qwen3.5:9b} --agent orchestrator"]
