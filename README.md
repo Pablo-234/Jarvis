@@ -17,9 +17,10 @@ run.cmd
 1. checks Docker Desktop,
 2. creates `.env` if necessary,
 3. generates a strong private OpenJarvis API key on first run,
-4. starts Ollama, OpenJarvis and the dashboard with Docker Compose,
-5. waits for the dashboard,
-6. opens it automatically in the browser.
+4. migrates the old project default `qwen3.5:2b` to the local default `qwen3.5:9b` while preserving custom model choices,
+5. starts Ollama, OpenJarvis and the dashboard with Docker Compose,
+6. waits for the dashboard,
+7. opens it automatically in the browser.
 
 Dashboard: `http://127.0.0.1:8765`
 
@@ -50,7 +51,7 @@ It binds only to `127.0.0.1` by default and does not store the OpenJarvis API ke
 ## What is included
 
 - OpenJarvis pinned to commit `daf5027ab3491e8d519fd80b8ceeac381ba3f93e`
-- local Ollama runtime with `qwen3.5:2b`
+- local Ollama runtime with `qwen3.5:9b`
 - persistent Jarvis persona (`SOUL.md`, `USER.md`, `MEMORY.md` seed)
 - private SQLite memory persisted between GitHub Actions runs
 - Docker/Compose local runtime with a durable data volume
