@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jarvis Dashboard</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b0d12;--panel:#121722;--line:#263044;--text:#eef4ff;--muted:#93a0b6;--ok:#39d98a;--bad:#ff6b6b;--accent:#66a3ff}
+    *{box-sizing:border-box} body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(circle at top,#172038 0,#0b0d12 48%);color:var(--text)}
+    .wrap{max-width:1050px;margin:0 auto;padding:32px 20px 56px}.top{display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap}.brand{font-size:34px;font-weight:800;letter-spacing:.5px}.sub{color:var(--muted);margin-top:4px}.badge{border:1px solid var(--line);border-radius:999px;padding:7px 11px;color:var(--muted);background:#0d121c}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:26px}.card{background:linear-gradient(180deg,#151b28,#10151e);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 12px 40px #0005}.label{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}.value{font-size:25px;font-weight:750;margin-top:7px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;background:var(--muted)}.dot.ok{background:var(--ok);box-shadow:0 0 12px #39d98a88}.dot.bad{background:var(--bad)}
+    .wide{grid-column:span 3}.links{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}a.btn,button{appearance:none;border:1px solid #32405b;background:#182238;color:#f4f7ff;border-radius:11px;padding:10px 13px;text-decoration:none;font-weight:650;cursor:pointer}a.btn:hover,button:hover{border-color:#5575a8;background:#1d2b49}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#0a0e16;border:1px solid #222c3e;border-radius:10px;padding:10px 12px;color:#c7d5ed;overflow:auto}.small{font-size:13px;color:var(--muted)}
+    .models{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.model{padding:7px 9px;border-radius:9px;background:#0b1019;border:1px solid #253048;color:#cbd7eb;font-family:ui-monospace,monospace;font-size:13px}.footer{margin-top:20px;color:#68758a;font-size:12px}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}.wide{grid-column:span 1}.brand{font-size:29px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><div class="brand">🤖 Jarvis Dashboard</div><div class="sub">Lokalny panel statusu OpenJarvis + Ollama</div></div>
+    <div class="badge" id="updated">sprawdzam…</div>
+  </div>
+
+  <div class="grid">
+    <section class="card"><div class="label">Jarvis API</div><div class="value"><span id="jarvisDot" class="dot"></span><span id="jarvisState">sprawdzam</span></div><div class="small" id="jarvisHint">127.0.0.1:8000</div></section>
+    <section class="card"><div class="label">Ollama</div><div class="value"><span id="ollamaDot" class="dot"></span><span id="ollamaState">sprawdzam</span></div><div class="small">lokalny silnik modeli</div></section>
+    <section class="card"><div class="label">Model</div><div class="value" id="primaryModel">—</div><div class="small">wykryty z Ollamy</div></section>
+
+    <section class="card wide">
+      <div class="label">Modele dostępne lokalnie</div>
+      <div id="models" class="models"><span class="small">ładowanie…</span></div>
+    </section>
+
+    <section class="card wide">
+      <div class="label">Skróty</div>
+      <div class="links">
+        <a class="btn" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">OpenJarvis API docs</a>
+        <a class="btn" href="https://github.com/Pablo-234/Jarvis/issues/1" target="_blank" rel="noreferrer">Jarvis Console</a>
+        <a class="btn" href="https://github.com/Pablo-234/Jarvis" target="_blank" rel="noreferrer">Repozytorium</a>
+        <button id="refresh">Odśwież status</button>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <div class="label">Najprostsze sterowanie</div>
+      <p class="small">W folderze repozytorium:</p>
+      <div class="mono">run.cmd              # uruchom wszystko i otwórz dashboard<br>status-jarvis.ps1    # pokaż stan kontenerów<br>stop-jarvis.ps1      # zatrzymaj Jarvisa</div>
+    </section>
+  </div>
+  <div class="footer">Panel działa wyłącznie lokalnie. Nie przechowuje klucza API i nie wystawia sterowania systemem do sieci.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function setState(prefix, ok, text){$(prefix+'Dot').className='dot '+(ok?'ok':'bad');$(prefix+'State').textContent=text}
+async function refresh(){
+  const now=new Date(); $('updated').textContent='ostatnia kontrola '+now.toLocaleTimeString('pl-PL');
+  try{
+    const r=await fetch('/api/jarvis-status',{cache:'no-store'});
+    const online=r.status<500;
+    setState('jarvis',online,online?'ONLINE':'OFFLINE');
+    $('jarvisHint').textContent=online?'API odpowiada na 127.0.0.1:8000':'brak odpowiedzi API';
+  }catch(e){setState('jarvis',false,'OFFLINE');$('jarvisHint').textContent='brak odpowiedzi API'}
+  try{
+    const r=await fetch('/api/ollama-models',{cache:'no-store'});
+    if(!r.ok) throw new Error('status '+r.status);
+    const data=await r.json(); const arr=Array.isArray(data.models)?data.models:[];
+    setState('ollama',true,'ONLINE');
+    $('primaryModel').textContent=arr[0]?.name||'brak modelu';
+    $('models').innerHTML=arr.length?arr.map(m=>`<span class="model">${String(m.name||'model').replace(/[<>&]/g,'')}</span>`).join(''):'<span class="small">Ollama działa, ale nie znaleziono modeli.</span>';
+  }catch(e){setState('ollama',false,'OFFLINE');$('primaryModel').textContent='—';$('models').innerHTML='<span class="small">Brak połączenia z Ollamą.</span>'}
+}
+$('refresh').addEventListener('click',refresh); refresh(); setInterval(refresh,5000);
+</script>
+</body>
+</html>
