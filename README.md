@@ -29,12 +29,67 @@ OpenJarvis API docs: `http://127.0.0.1:8000/docs`
 Useful local files:
 
 ```text
-run.cmd               # double-click: start everything
-run.ps1               # PowerShell one-click launcher
-start-jarvis.ps1      # start stack without opening dashboard
-status-jarvis.ps1     # container status
-stop-jarvis.ps1       # stop Jarvis
+run.cmd                 # double-click: start everything
+smart.cmd               # hybrid Jarvis console: Qwen 9B + GPT-5.6 Sol
+configure-openai.cmd    # securely configure the local OpenAI API key
+run.ps1                 # PowerShell one-click launcher
+smart-jarvis.ps1        # hybrid routing implementation
+start-jarvis.ps1        # start stack without opening dashboard
+status-jarvis.ps1       # container status
+stop-jarvis.ps1         # stop Jarvis
 ```
+
+## Hybrid brain: local Qwen + GPT-5.6 Sol
+
+The local Jarvis has two inference tiers:
+
+- **Worker:** `qwen3.5:9b` through local Ollama. It is private, local and has no per-request API charge.
+- **Strategic brain:** `gpt-5.6`, the API alias for GPT-5.6 Sol, through OpenAI. It is used for tasks where frontier reasoning is worth the API cost.
+
+The strategic model is optional. Jarvis continues to work locally without an OpenAI key.
+
+### Configure GPT-5.6 Sol
+
+Get an OpenAI API key from your own OpenAI API account, then double-click:
+
+```text
+configure-openai.cmd
+```
+
+The script asks for the key without echoing it, saves it only to the local `.env` file and recreates the Jarvis container so the key is available to OpenJarvis. `.env` is ignored by git. Never commit the key.
+
+The default strategic model is:
+
+```text
+JARVIS_STRATEGIC_MODEL=gpt-5.6
+```
+
+### Use hybrid mode
+
+Double-click:
+
+```text
+smart.cmd
+```
+
+or run:
+
+```powershell
+.\smart-jarvis.ps1 "your task"
+```
+
+`auto` mode first asks the **local** Qwen model to classify the task as `LOCAL` or `STRATEGIC`. This routing decision consumes no OpenAI tokens. Routine work stays local; difficult architecture, debugging, research synthesis, high-impact planning and similar work can be escalated to GPT-5.6 Sol.
+
+Manual overrides are also available:
+
+```powershell
+.\smart-jarvis.ps1 -Mode local "your task"
+.\smart-jarvis.ps1 -Mode strategic "your task"
+```
+
+If the strategic call fails, auto/strategic execution falls back to the local Qwen worker instead of taking Jarvis offline.
+
+The GPT-5.6 integration uses the existing OpenJarvis cloud engine. The API key is supplied only as a runtime environment variable; it is not written into the public persona, repository, Docker image or dashboard.
 
 ## Local dashboard
 
@@ -46,12 +101,14 @@ The dashboard is a tiny nginx container with no Node.js/Python requirement on th
 - all models currently available in Ollama,
 - shortcuts to OpenJarvis API docs, GitHub Jarvis Console and the repository.
 
-It binds only to `127.0.0.1` by default and does not store the OpenJarvis API key.
+It binds only to `127.0.0.1` by default and does not store the OpenJarvis or OpenAI API keys.
 
 ## What is included
 
 - OpenJarvis pinned to commit `daf5027ab3491e8d519fd80b8ceeac381ba3f93e`
 - local Ollama runtime with `qwen3.5:9b`
+- optional GPT-5.6 Sol strategic tier
+- local model-based task router
 - persistent Jarvis persona (`SOUL.md`, `USER.md`, `MEMORY.md` seed)
 - private SQLite memory persisted between GitHub Actions runs
 - Docker/Compose local runtime with a durable data volume
@@ -139,6 +196,8 @@ git submodule update --init --recursive
 - Repository edits are proposed through a PR rather than merged automatically.
 - Local API access requires `OPENJARVIS_API_KEY`.
 - Local API and dashboard are bound to loopback (`127.0.0.1`) by default.
+- `OPENAI_API_KEY` remains local in `.env` and is passed only into the Jarvis runtime container.
+- The hybrid router itself is local and does not send the task to OpenAI unless it selects the strategic tier.
 
 ## Upstream and license
 
