@@ -12,7 +12,7 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c"]
-    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${JARVIS_MODEL:-qwen3.5:2b}"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${JARVIS_MODEL:-qwen3.5:9b}"]
     restart: "no"
 
   jarvis:
@@ -24,7 +24,7 @@ services:
     environment:
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY in .env}
       OLLAMA_HOST: http://ollama:11434
-      JARVIS_MODEL: ${JARVIS_MODEL:-qwen3.5:2b}
+      JARVIS_MODEL: ${JARVIS_MODEL:-qwen3.5:9b}
       PORT: 8000
     ports:
       - "127.0.0.1:${PORT:-8000}:8000"
