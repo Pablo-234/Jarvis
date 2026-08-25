@@ -23,8 +23,10 @@ services:
     restart: unless-stopped
     environment:
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY in .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_HOST: http://ollama:11434
       JARVIS_MODEL: ${JARVIS_MODEL:-qwen3.5:9b}
+      JARVIS_STRATEGIC_MODEL: ${JARVIS_STRATEGIC_MODEL:-gpt-5.6}
       PORT: 8000
     ports:
       - "127.0.0.1:${PORT:-8000}:8000"
